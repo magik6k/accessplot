@@ -1,0 +1,95 @@
+<html>
+<head>
+</head>
+<body>
+<input type="range" id="progress" style="width: 90vw">
+<div id="at"></div>
+<div id="vis"></div>
+
+<script>
+    let w = screen.width
+
+    async function run() {
+        let ltext = await fetch("./access.json").then(r => r.text())
+        let log = ltext.split("\n").filter(l => l !== "").map(l => JSON.parse(l))
+
+        let atDiv = document.getElementById("at")
+        let visDiv = document.getElementById("vis")
+        let progbar = document.getElementById("progress")
+        progbar.max = log.length
+        progbar.value = 0
+        let canvs = {}
+
+        function step(timestamp) {
+            for (let i = 0; i < 3; i++) { // Tune this value for changing speed
+                let l = log[progbar.value]
+                atDiv.innerText = l.At
+
+                Object.values(canvs).forEach(c => {
+                    c.ctx.fillStyle = 'rgba(255, 255, 255, 0.03)';
+                    c.ctx.fillRect(0, 0, w, 64);
+                })
+
+                function renderAccesses(accesses, reads) {
+                    for (const [key, value] of Object.entries(accesses)) {
+                        if(canvs[key] === undefined) {
+                            let c = document.createElement("canvas")
+                            c.height = 64
+                            c.width = w
+                            let ctx = c.getContext('2d');
+
+                            canvs[key] = {
+                                elem: c,
+                                ctx: ctx,
+                            }
+
+                            let fname = document.createElement("div")
+                            fname.innerText = key
+
+                            let elem = document.createElement("div")
+                            elem.appendChild(fname)
+                            elem.appendChild(c)
+
+                            visDiv.appendChild(elem)
+                        }
+
+                        let c = canvs[key]
+
+                        let max = Object.keys(value).map(i => parseInt(i, 10)).reduce((p, c) => p > c ? p : c, c.elem.width)
+                        if (max > c.elem.width) {
+                            //c.elem.width = max todo warn
+                        }
+
+                        for (const [ats, count] of Object.entries(value)) {
+                            let at = parseInt(ats, 10)
+
+                            if(reads){
+                                c.ctx.fillStyle = 'rgb(0, 200, 0)';
+                                c.ctx.fillRect(at, 0, 1, 32);
+                            } else {
+                                c.ctx.fillStyle = 'rgb(200, 0, 0)';
+                                c.ctx.fillRect(at, 32, 1, 32);
+                            }
+                        }
+                    }
+                }
+
+                renderAccesses(l.Reads, true)
+                renderAccesses(l.Writes, false)
+
+                progbar.value++
+                if (log.length <= progbar.value) {
+                    return // stop
+                }
+            }
+
+            window.requestAnimationFrame(step);
+        }
+
+        window.requestAnimationFrame(step);
+    }
+
+    run()
+</script>
+</body>
+</html>
