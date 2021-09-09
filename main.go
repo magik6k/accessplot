@@ -199,6 +199,9 @@ func (f *loopbackFile) Write(ctx context.Context, data []byte, off int64) (uint3
 	}
 
 	n, err := syscall.Pwrite(f.fd, data, off)
+	if err != nil {
+		//log.Println("write err: ", err.Error(), " f:", f.fd)
+	}
 	return uint32(n), fs.ToErrno(err)
 }
 
@@ -279,9 +282,12 @@ var _ = (fs.NodeSymlinker)((*LoopbackNode)(nil))
 var _ = (fs.NodeUnlinker)((*LoopbackNode)(nil))
 var _ = (fs.NodeRmdirer)((*LoopbackNode)(nil))
 var _ = (fs.NodeRenamer)((*LoopbackNode)(nil))
+var _ = (fs.NodeFsyncer)((*LoopbackNode)(nil))
 
 func (n *LoopbackNode) Statfs(ctx context.Context, out *fuse.StatfsOut) syscall.Errno {
 	s := syscall.Statfs_t{}
+	//log.Println("Stat: ", n.path())
+
 	err := syscall.Statfs(n.path(), &s)
 	if err != nil {
 		return fs.ToErrno(err)
@@ -309,6 +315,8 @@ func (n *LoopbackNode) Lookup(ctx context.Context, name string, out *fuse.EntryO
 	out.Attr.FromStat(&st)
 	node := n.RootData.newNode(n.EmbeddedInode(), name, &st)
 	ch := n.NewInode(ctx, node, n.RootData.idFromStat(&st))
+
+	//log.Println("LOOK: ", p, " I:", ch.String())
 	return ch, 0
 }
 
@@ -472,6 +480,8 @@ func (n *LoopbackNode) Readlink(ctx context.Context) ([]byte, syscall.Errno) {
 func (n *LoopbackNode) Open(ctx context.Context, flags uint32) (fh fs.FileHandle, fuseFlags uint32, errno syscall.Errno) {
 	flags = flags &^ syscall.O_APPEND
 	p := n.path()
+	//log.Println("Open: ", " f:", p)
+
 	f, err := syscall.Open(p, int(flags), 0)
 	if err != nil {
 		return nil, 0, fs.ToErrno(err)
@@ -625,6 +635,11 @@ func (n *LoopbackNode) Removexattr(ctx context.Context, attr string) syscall.Err
 func (n *LoopbackNode) Listxattr(ctx context.Context, dest []byte) (uint32, syscall.Errno) {
 	sz, err := unix.Llistxattr(n.path(), dest)
 	return uint32(sz), fs.ToErrno(err)
+}
+
+func (n *LoopbackNode) Fsync(ctx context.Context, f fs.FileHandle, flags uint32) syscall.Errno {
+	syscall.Sync() // don't worry about it
+	return 0
 }
 
 func (n *LoopbackNode) renameExchange(name string, newparent fs.InodeEmbedder, newName string) syscall.Errno {
